@@ -1,0 +1,9 @@
+
+# Node modules directory (contains installed dependencies)
+node_modules
+
+# Environment variable files (contains sensitive data)
+.env
+
+# Dependency lock files (optional, depending on workflow)
+package-lock.json

@@ -1,0 +1,25 @@
+{
+  "name": "clean-my-wantlist",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TaekedeHaan/clean-my-wantlist.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/TaekedeHaan/clean-my-wantlist/issues"
+  },
+  "homepage": "https://github.com/TaekedeHaan/clean-my-wantlist#readme",
+  "dependencies": {
+    "disconnect": "^1.2.2",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2"
+  }
+}
