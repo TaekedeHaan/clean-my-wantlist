@@ -43,56 +43,53 @@ function askUserToKeep(release) {
 }
 
 async function authenticate() {
-    try {
-        const oAuth = new Discogs().oauth();
+    const oAuth = new Discogs().oauth();
 
-        const requestData = await new Promise((resolve, reject) => {
-            oAuth.getRequestToken(
-                consumerKey,
-                consumerSecret,
-                'http://localhost:3000/callback', // Local callback URL
-                (err, requestData) => {
-                    if (err) return reject(err);
-                    resolve(requestData);
-                }
-            );
-        });
-
-        console.log(`Authorize the app here: ${requestData.authorizeUrl}`);
-
-        const server = http.createServer(async (req, res) => {
-            if (!req.url.startsWith('/callback')) {
-                return;
+    const requestData = await new Promise((resolve, reject) => {
+        oAuth.getRequestToken(
+            consumerKey,
+            consumerSecret,
+            'http://localhost:3000/callback', // Local callback URL
+            (err, requestData) => {
+                if (err) return reject(err);
+                resolve(requestData);
             }
+        );
+    });
 
-            const query = url.parse(req.url, true).query;
-            const verifierCode = query.oauth_verifier;
+    console.log(`Authorize the app here: ${requestData.authorizeUrl}`);
 
-            // Close the server after handling the request
-            res.writeHead(200, { 'Content-Type': 'text/plain' });
-            res.end('Authorization successful! You can close this window', verifierCode);
-            server.close();
+    const verifierCode = await new Promise((resolve) => {
+        const server = http.createServer((req, res) => {
+            if (req.url.startsWith('/callback')) {
+                const query = url.parse(req.url, true).query;
+                const code = query.oauth_verifier;
 
-            const accessData = await new Promise((resolve, reject) => {
-                oAuth.getAccessToken(
-                    verifierCode,
-                    (err, accessData) => {
-                        if (err) return reject(err);
-                        resolve(accessData);
-                    }
-                );
-            });
+                // Respond to the user and close the server
+                res.writeHead(200, { 'Content-Type': 'text/plain' });
+                res.end('Authorization successful! You can close this window.');
+                server.close();
 
+                resolve(code); // Resolve the Promise with the verifier code
+            }
         });
 
-        // Start the server
         server.listen(3000, () => {
             console.log('Listening for the callback at http://localhost:3000/callback');
         });
-    }
-    catch (error) {
-        console.error('Error during OAuth or fetching wantlist:', error.message);
-    }
+    });
+
+    const accessData = await new Promise((resolve, reject) => {
+        oAuth.getAccessToken(
+            verifierCode,
+            (err, accessData) => {
+                if (err) return reject(err);
+                resolve(accessData);
+            }
+        );
+    });
+
+    return accessData;
 }
 
 async function loadAuthentication() {
@@ -136,11 +133,14 @@ async function refineWantlist(accessData) {
 }
 
 
-loadAuthentication().then((accessData) => refineWantlist(accessData));
-//authenticate().then((accessData) => refineWantlist(accessData));
+// loadAuthentication().then((accessData) => refineWantlist(accessData));
+authenticate().then((accessData) => refineWantlist(accessData));
 // Start with the first item
 
 
 
 // node js:
 //  javascript on a server instead of a webbrowser
+
+// npm node package manager) npm is the default package manager for the JavaScript runtime environment Node.js and is included as a recommended feature in the Node.js installer.
+// npx
