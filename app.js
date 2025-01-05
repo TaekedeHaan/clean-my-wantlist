@@ -1,19 +1,31 @@
 require('dotenv').config();
-const http = require('http');
-const url = require('url');
 const readline = require('readline');
 const Discogs = require('disconnect').Client;
+const morgan = require('morgan');
+const Authorize = require('./authorize')
+const debug = require('debug')('app:main')
+const wantlist = require('./routes/wantlist')
+const express = require('express');
 
-const consumerKey = process.env.DISCOGS_CONSUMER_KEY;
-const consumerSecret = process.env.DISCOGS_CONSUMER_SECRET;
-const token = process.env.DISCOGS_TOKEN;
-const secret = process.env.DISCOGS_SECRET;
+const app = express();
+app.use('/api/wantlist', wantlist)
+
+if (app.get('env') == 'development') {
+    debug("Enabeling morgan");
+    app.use(morgan('tiny'));
+}
+
+const port = process.env.PORT || 3000;
+const callback = '/authenticate/callback';
 
 const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout
 });
 
+var authorize = new Authorize();
+let discogsClient;
+let username;
 
 function showWantlistItem(release) {
 
@@ -22,90 +34,60 @@ function showWantlistItem(release) {
     const year = release.basic_information.year;
     const imageUrl = release.basic_information.cover_image; // Optional: Album cover image URL
 
-    console.log(`Title: ${title}`);
-    console.log(`Artist: ${artist}`);
-    console.log(`Year: ${year}`);
+    debug(`Title: ${title}`);
+    debug(`Artist: ${artist}`);
+    debug(`Year: ${year}`);
     if (imageUrl) {
-        console.log(`Cover Image: ${imageUrl}`);
+        debug(`Cover Image: ${imageUrl}`);
     }
-    console.log('-------------------');
+    debug('-------------------');
 }
 
 function askUserToKeep(release) {
     showWantlistItem(release)
     rl.question('Would you like to keep this item? (y/n): ', (answer) => {
         if (answer.toLowerCase() === 'y') {
-            console.log('Item kept.');
+            debug('Item kept.');
         } else {
-            console.log('Item removed.');
+            debug('Item removed.');
         }
     });
 }
 
-async function authenticate() {
-    const oAuth = new Discogs().oauth();
 
-    const requestData = await new Promise((resolve, reject) => {
-        oAuth.getRequestToken(
-            consumerKey,
-            consumerSecret,
-            'http://localhost:3000/callback', // Local callback URL
-            (err, requestData) => {
-                if (err) return reject(err);
-                resolve(requestData);
-            }
-        );
-    });
+app.get('/authenticate/load', async (req, res) => {
+    const isConnected = authorize.isConnected()
+    if (isConnected) {
+        res.send('Authorization successful! You can now use the app.');
+    }
+    else {
+        res.send(`Error while loading authentication, try to authenitcate instead`)
+    }
+});
 
-    console.log(`Authorize the app here: ${requestData.authorizeUrl}`);
 
-    const verifierCode = await new Promise((resolve) => {
-        const server = http.createServer((req, res) => {
-            if (req.url.startsWith('/callback')) {
-                const query = url.parse(req.url, true).query;
-                const code = query.oauth_verifier;
+app.get('/authenticate', async (req, res) => {
+    try {
+        const url = authorize.connect(`http://localhost:${port}${callback}`);
+        res.json({ authorizeUrl: url });
+    } catch (error) {
+        res.send(`Error while requesting access token: ${error.message}`)
+    }
+});
 
-                // Respond to the user and close the server
-                res.writeHead(200, { 'Content-Type': 'text/plain' });
-                res.end('Authorization successful! You can close this window.');
-                server.close();
+app.get('/authenticate/callback', async (req, res) => {
+    try {
+        authorize.callback(req, res)
+    } catch (error) {
+        res.send(`Error while getting access token: ${error.message}`)
+    }
+});
 
-                resolve(code); // Resolve the Promise with the verifier code
-            }
-        });
-
-        server.listen(3000, () => {
-            console.log('Listening for the callback at http://localhost:3000/callback');
-        });
-    });
-
-    const accessData = await new Promise((resolve, reject) => {
-        oAuth.getAccessToken(
-            verifierCode,
-            (err, accessData) => {
-                if (err) return reject(err);
-                resolve(accessData);
-            }
-        );
-    });
-
-    return accessData;
-}
-
-async function loadAuthentication() {
-    const oAuth = new Discogs().oauth();
-    var accessData = oAuth.auth
-    accessData.level = 2
-    accessData.consumerKey = consumerKey
-    accessData.consumerSecret = consumerSecret
-    accessData.token = token
-    accessData.tokenSecret = secret
-    return accessData
-}
-
-async function refineWantlist(accessData) {
-    console.log('Access Token:', accessData);
-    const discogsClient = new Discogs(accessData);
+app.get('/profile', async (req, res) => {
+    if (discogsClient == undefined) {
+        res.send('Login first')
+        return;
+    }
 
     const userProfile = await new Promise((resolve, reject) => {
         discogsClient.getIdentity((err, profile) => {
@@ -114,9 +96,23 @@ async function refineWantlist(accessData) {
         });
     });
 
-    const username = userProfile.username;
-    console.log('Authenticated as:', username);
+    username = userProfile.username;
+    res.send(`Authenticated as ${username}`);
+});
 
+async function main() {
+    app.listen(port, () => { debug(`Listening on port ${port}`) })
+
+    const isConnected = await authorize.isConnected();
+    if (!isConnected) {
+        var url = await authorize.connect(`http://localhost:${port}${callback}`)
+    }
+}
+
+
+main()
+
+async function refineWantlist() {
 
     const wantlist = await discogsClient.user().wantlist().getReleases(username);
 
@@ -124,19 +120,13 @@ async function refineWantlist(accessData) {
     if (wantlist && wantlist.wants && wantlist.wants.length > 0) {
         var item = 0
         const release = wantlist.wants[item]
-        console.log(`Item ${item}:`);
+        debug(`Item ${item}:`);
         askUserToKeep(release);
 
     } else {
-        console.log('Your wantlist is empty or could not be retrieved.');
+        debug('Your wantlist is empty or could not be retrieved.');
     }
 }
-
-
-// loadAuthentication().then((accessData) => refineWantlist(accessData));
-authenticate().then((accessData) => refineWantlist(accessData));
-// Start with the first item
-
 
 
 // node js:
@@ -144,3 +134,11 @@ authenticate().then((accessData) => refineWantlist(accessData));
 
 // npm node package manager) npm is the default package manager for the JavaScript runtime environment Node.js and is included as a recommended feature in the Node.js installer.
 // npx
+
+
+// GET /releases
+
+// dealing with async:
+//  - calbacks
+//  - promises
+//  - asyn/await (wraps around promises)
