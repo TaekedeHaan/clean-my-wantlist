@@ -14,7 +14,7 @@ class Authorize {
         oAuth.auth.consumerKey = consumerKey;
         oAuth.auth.consumerSecret = consumerSecret;
         oAuth.auth.token = token;
-        oAuth.auth.tokenSecret = ''; // secret;
+        oAuth.auth.tokenSecret = secret;
 
         this.oAuth = oAuth;
     }

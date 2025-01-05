@@ -4,11 +4,12 @@ const Discogs = require('disconnect').Client;
 const morgan = require('morgan');
 const Authorize = require('./authorize')
 const debug = require('debug')('app:main')
-const wantlist = require('./routes/wantlist')
+const WantlistRoutes = require('./routes/wantlist')
+const Wantlist = require('./lib/wantlist')
 const express = require('express');
 
 const app = express();
-app.use('/api/wantlist', wantlist)
+
 
 if (app.get('env') == 'development') {
     debug("Enabeling morgan");
@@ -107,6 +108,14 @@ async function main() {
     if (!isConnected) {
         var url = await authorize.connect(`http://localhost:${port}${callback}`)
     }
+
+
+    const discogsClient = new Discogs(authorize.oAuth.auth);
+    wantlist = new Wantlist(discogsClient);
+    wantlist.fetch();
+
+    wantlistRoutes = new WantlistRoutes(wantlist)
+    app.use('/api/wantlist', wantlistRoutes.router)
 }
 
 
