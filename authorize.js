@@ -14,69 +14,78 @@ class Authorize {
         oAuth.auth.consumerKey = consumerKey;
         oAuth.auth.consumerSecret = consumerSecret;
         oAuth.auth.token = token;
-        oAuth.auth.tokenSecret = secret;
+        oAuth.auth.tokenSecret = ''; // secret;
 
         this.oAuth = oAuth;
     }
 
     async connect(callbackUrl) {
-        debug('Will try to conennect')
+        try {
+            debug('Trying to connect...')
 
-        const authorizeUrl = await new Promise((resolve, reject) => {
-            this.oAuth.getRequestToken(
-                this.oAuth.auth.consumerKey,
-                this.oAuth.auth.consumerSecret,
-                callbackUrl,
-                (err, requestData) => {
+            const authorizeUrl = await new Promise((resolve, reject) => {
+                const callback = (err, requestData) => {
                     if (err) return reject(err);
                     resolve(requestData.authorizeUrl);
                 }
-            );
-        }).catch((error) => {
-            debug(`Failed to get request token: ${error}`)
-        });
 
-        if (authorizeUrl === undefined) return;
+                this.oAuth.getRequestToken(
+                    this.oAuth.auth.consumerKey,
+                    this.oAuth.auth.consumerSecret,
+                    callbackUrl,
+                    callback
+                );
+            })
 
+            debug(`Authorize the app here: ${this.oAuth.auth.authorizeUrl} `);
+        }
 
-        debug(`Authorize the app here: ${authorizeUrl} `);
-        return authorizeUrl;
+        catch (error) { debug(`Failed to get request token: ${error}`); }
     }
 
     async callback(req, res) {
+        try {
+            const verifierCode = req.query.oauth_verifier;
 
-        const verifierCode = req.query.oauth_verifier;
+            const accessData = await new Promise((resolve, reject) => {
+                const callback = (err, accessData) => {
+                    if (err) return reject(err);
+                    resolve(accessData);
+                }
 
-        const accessData = await new Promise((resolve, reject) => {
-            this.oAuth.getAccessToken(verifierCode, (err, accessData) => {
-                if (err) return reject(err);
-                resolve(accessData);
+                this.oAuth.getAccessToken(verifierCode, callback);
             });
-        }).catch((error) => {
-            debug(`Failed to get access token: ${error}`)
-        });
 
-        if (accessData === undefined) return;
 
-        this.oAuth.auth = accessData;
-        res.send('Authorization successful! You can now use the app.');
+            this.oAuth.auth = accessData;
+            res.send('Authorization successful! You can now use the app.');
+            this.isConnected()
+
+        }
+        catch (error) {
+            debug(`Failed to get access token: ${error}`);
+        }
     }
 
     async isConnected() {
-        const discogsClient = new Discogs(this.oAuth.auth);
+        try {
+            const discogsClient = new Discogs(this.oAuth.auth);
 
-        const userProfile = await new Promise((resolve, reject) => {
-            discogsClient.getIdentity((err, profile) => {
-                if (err) return reject(err);
-                resolve(profile);
+            const userProfile = await new Promise((resolve, reject) => {
+                const callback = (err, profile) => {
+                    if (err) return reject(err);
+                    resolve(profile);
+                };
+
+                discogsClient.getIdentity(callback);
             });
-        }).catch((error) => {
-            debug(`Failed to get identity: ${error}`)
-        });
 
-        if (userProfile === undefined) return false;
-        debug(`You are connected ${userProfile.username}!`);
-        return true;
+            debug(`You are connected ${userProfile.username}!`);
+            return true;
+        }
+        catch (error) {
+            debug(`Failed to get identity: ${error}`);
+        }
 
 
     }
